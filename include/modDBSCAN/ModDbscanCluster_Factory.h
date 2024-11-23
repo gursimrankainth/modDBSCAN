@@ -2,13 +2,13 @@
 
 #pragma once
 
-#include "algorithms/calorimetry/ModDbscanCluster_Factory.h"
+#include "algorithms/calorimetry/ModDbscanCluster.h"
 #include "extensions/jana/JOmniFactory.h"
 #include "services/algorithms_init/AlgorithmsInit_service.h"
 
 namespace eicrecon {
 
-    class ModDbscanCluster_Factory : public JOmniFactory<ModDbscanCluster_Factory, ModDbscanClusterConfig> {
+    class ModDbscanCluster_factory : public JOmniFactory<ModDbscanCluster_factory, ModDbscanClusterConfig> {
 
     public: 
         using AlgoDBSCAN = eicrecon::ModDbscanCluster;  // Alias for the algorithm

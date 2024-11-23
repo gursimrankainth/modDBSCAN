@@ -1,2 +1,2 @@
 # modDBSCAN
-Juggler factory for Mod DBSCAN algorithm
+EICRecon/Juggler code for Mod DBSCAN algorithm

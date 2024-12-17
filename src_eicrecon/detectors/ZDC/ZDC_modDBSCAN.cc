@@ -8,8 +8,11 @@
 
 #include "algorithms/calorimetry/ImagingTopoClusterConfig.h"
 #include "extensions/jana/JOmniFactoryGeneratorT.h"
+#include "factories/calorimetry/CalorimeterClusterRecoCoG_factory.h"
 #include "factories/calorimetry/CalorimeterHitDigi_factory.h"
 #include "factories/calorimetry/CalorimeterHitReco_factory.h"
+#include "factories/calorimetry/CalorimeterIslandCluster_factory.h"
+#include "factories/calorimetry/CalorimeterTruthClustering_factory.h"
 #include "factories/calorimetry/HEXPLIT_factory.h"
 #include "factories/calorimetry/ModDbscanCluster_factory.h"
 
@@ -20,7 +23,7 @@ extern "C" {
 
         InitJANAPlugin(app);
 
-        // 1. Adding Hcal-based clusters, similar to Ecal
+        // 1. Adding CalorimeterHitDigi_factory
         app->Add(new JOmniFactoryGeneratorT<CalorimeterHitDigi_factory>(
           "HcalFarForwardZDCRawHits",
           {"HcalFarForwardZDCHits"},
@@ -39,7 +42,7 @@ extern "C" {
             .corrMeanScale = "1.0",
             .readout = "HcalFarForwardZDCHits",
           },
-          app   // TODO: Remove me once fixed
+          app
         ));
 
         // 2. Adding CalorimeterHitReco_factory
@@ -58,34 +61,31 @@ extern "C" {
             .layerField = "layer",
             .sectorField = "system",
           },
-          app   // TODO: Remove me once fixed
+          app
         ));
 
-        // 3. Adding HEXPLIT factory
+        // 3. Adding HEXPLIT_factory
         app->Add(new JOmniFactoryGeneratorT<HEXPLIT_factory>(
           "HcalFarForwardZDCSubcellHits", {"HcalFarForwardZDCRecHits"}, {"HcalFarForwardZDCSubcellHits"},
           {
             .MIP = 472. * dd4hep::keV,
-            .Emin_in_MIPs=0.5,
-            .tmax=269 * dd4hep::ns,
+            .Emin_in_MIPs = 0.5,
+            .tmax = 269 * dd4hep::ns,
           },
-          app   // TODO: Remove me once fixed
+          app
         ));
 
-        // 4. Adding the new ModDbscanCluster_factory algorithm
+        // 4. Adding the ModDbscanCluster_factory algorithm
         app->Add(new JOmniFactoryGeneratorT<ModDbscanCluster_factory>(
           "HcalFarForwardZDCImagingProtoClusters",  // Name of the DBSCAN clusters
-          {"HcalFarForwardZDCSubcellHits"},  // Input hit collection (same as ImagingTopoCluster's input collection)
-          {"HcalFarForwardZDCImagingProtoClusters"},  // Output cluster collection (same as ImagingTopoCluster's output collection)
+          {"HcalFarForwardZDCSubcellHits"},  // Input hit collection
+          {"HcalFarForwardZDCImagingProtoClusters"},  // Output cluster collection
           {
               .epsilon1 = 60,  // Epsilon1 value for DBSCAN clustering
               .minNeighbors1 = 3,  // Minimum number of neighbors for DBSCAN clustering
               .energyThreshold = 0.1,  // Energy threshold for clustering
           },
           app  // Application pointer
-      ));
-
+        ));
     }
 }
-
-

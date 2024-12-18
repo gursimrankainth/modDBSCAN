@@ -29,108 +29,6 @@ namespace eicrecon {
         algorithms::Output<edm4eic::ProtoClusterCollection>
     >;
 
-    class DBSCAN_S1 {
-    public:
-        enum ClusterLabel { UNDEFINED = -2, NOISE = -1 };
-
-        DBSCAN_S1(double epsilon, int min_neighbors, double energy_threshold)
-            : epsilon(epsilon), min_neighbors(min_neighbors), energy_threshold(energy_threshold) {}
-
-        std::unordered_map<int, std::vector<std::tuple<float, float, float, float>>> cluster(
-            const std::vector<std::tuple<float, float, float, float>>& points) {
-            std::vector<int> point_clusters(points.size(), UNDEFINED);
-            int current_cluster = 0;
-
-            for (size_t i = 0; i < points.size(); ++i) {
-                if (point_clusters[i] != UNDEFINED || is_noise(points[i])) {
-                    continue;
-                }
-
-                std::vector<size_t> neighbors = range_query(points, i);
-
-                if (neighbors.size() < min_neighbors || !energy_check(points, neighbors)) {
-                    point_clusters[i] = NOISE;
-                    continue;
-                }
-
-                point_clusters[i] = current_cluster;
-                expand_cluster(points, point_clusters, neighbors, current_cluster);
-                ++current_cluster;
-            }
-
-            return split_by_cluster(points, point_clusters);
-        }
-
-    private:
-        double epsilon;
-        int min_neighbors;
-        double energy_threshold;
-
-        bool is_noise(const std::tuple<float, float, float, float>& point) const {
-            return std::get<2>(point) > 36500 && std::get<3>(point) < energy_threshold;
-        }
-
-        std::vector<size_t> range_query(const std::vector<std::tuple<float, float, float, float>>& points, size_t idx) const {
-            std::vector<size_t> neighbors;
-            const auto& target_point = points[idx];
-
-            for (size_t i = 0; i < points.size(); ++i) {
-                if (i != idx && distance(target_point, points[i]) <= epsilon) {
-                    neighbors.push_back(i);
-                }
-            }
-
-            return neighbors;
-        }
-
-        double distance(const std::tuple<float, float, float, float>& p1, const std::tuple<float, float, float, float>& p2) const {
-            double dx = std::get<0>(p1) - std::get<0>(p2);
-            double dy = std::get<1>(p1) - std::get<1>(p2);
-            double dz = std::get<2>(p1) - std::get<2>(p2);
-            return std::sqrt(dx * dx + dy * dy + dz * dz);
-        }
-
-        bool energy_check(const std::vector<std::tuple<float, float, float, float>>& points, const std::vector<size_t>& neighbors) const {
-            return std::any_of(neighbors.begin(), neighbors.end(), [&](size_t idx) {
-                return std::get<3>(points[idx]) > energy_threshold;
-            });
-        }
-
-        void expand_cluster(const std::vector<std::tuple<float, float, float, float>>& points, 
-                            std::vector<int>& point_clusters,
-                            const std::vector<size_t>& seeds, 
-                            int current_cluster) {
-            std::vector<size_t> to_expand = seeds;
-            while (!to_expand.empty()) {
-                size_t q_idx = to_expand.back();
-                to_expand.pop_back();
-
-                if (point_clusters[q_idx] == NOISE || point_clusters[q_idx] == UNDEFINED) {
-                    point_clusters[q_idx] = current_cluster;
-                    auto neighbors = range_query(points, q_idx);
-                    if (neighbors.size() >= min_neighbors) {
-                        to_expand.insert(to_expand.end(), neighbors.begin(), neighbors.end());
-                    }
-                }
-            }
-        }
-
-        std::unordered_map<int, std::vector<std::tuple<float, float, float, float>>> split_by_cluster(
-            const std::vector<std::tuple<float, float, float, float>>& points,
-            const std::vector<int>& point_clusters) const {
-
-            std::unordered_map<int, std::vector<std::tuple<float, float, float, float>>> clusters;
-
-            for (size_t i = 0; i < points.size(); ++i) {
-                if (point_clusters[i] != NOISE) {
-                    clusters[point_clusters[i]].push_back(points[i]);
-                }
-            }
-
-            return clusters;
-        }
-    };
-
     class ModDbscanCluster
         : public ModDbscanClusterAlgorithm,
           public WithPodConfig<ModDbscanClusterConfig> {
@@ -148,56 +46,127 @@ namespace eicrecon {
         double energyThreshold{0};
 
     public:
-        void process(const Input& input, const Output& output) const final {
-            const auto [hits] = input;  // Get the input hits
-            auto [proto_clusters] = output;  // Get the output clusters
-
-            // Extract position (x, y, z) and energy from the hits
-            std::vector<std::tuple<float, float, float, float>> hit_points;
-            std::vector<edm4eic::CalorimeterHit> hit_refs;  // Store original hits for reference
-
-            // Loop over hits, collecting (x, y, z, energy) info
-            for (std::size_t i = 0; i < hits->size(); ++i) {
-                const auto& hit = (*hits)[i];
-                auto position = hit.getPosition();
-                float x = position.x;
-                float y = position.y;
-                float z = position.z;
-                float energy = hit.getEnergy();
-
-                hit_points.emplace_back(x, y, z, energy);
-                hit_refs.push_back(hit);
-
-                debug("Hit {}: position = ({}, {}, {}), energy = {}", i, x, y, z, energy);
+        void init() {
+            // Sanity checks for configuration values
+            if (m_cfg.epsilon1 <= 0) {
+                error("Epsilon value for DBSCAN must be positive.");
+                return;
+            }
+            if (m_cfg.minNeighbors1 <= 0) {
+                error("Minimum number of neighbors must be positive.");
+                return;
+            }
+            if (m_cfg.energyThreshold < 0) {
+                error("Energy threshold cannot be negative.");
+                return;
             }
 
-            // Instantiate DBSCAN and perform clustering
-            DBSCAN_S1 dbscan(epsilon1, minNeighbors1, energyThreshold);
-            auto clusters = dbscan.cluster(hit_points);  // Run clustering
+            // Assign values from the configuration
+            epsilon1 = m_cfg.epsilon1;
+            minNeighbors1 = m_cfg.minNeighbors1;
+            energyThreshold = m_cfg.energyThreshold;
 
-            // Create and store the clusters in output (proto_clusters)
-            for (const auto& [cluster_id, points] : clusters) {
-                if (cluster_id == DBSCAN_S1::NOISE) {
-                    continue;  // Skip noise points
-                }
+            // Summarize the clustering parameters
+            info("Epsilon: Radius of neighborhood <= [{} mm].", epsilon1);
+            info("Minimum Neighbors: Minimum number of hits required to form a cluster <= [{}].", minNeighbors1);
+            info("Energy Threshold: Cluster core hit energy threshold <= [{} GeV].", energyThreshold);
+        }
 
-                auto pcl = proto_clusters->create();  // Create a new ProtoCluster
+        void process(const Input& input, const Output& output) const final {
+            const auto [hits] = input;
+            auto [proto] = output;
 
-                for (const auto& point : points) {
-                    // Locate the original hit corresponding to this point
-                    auto it = std::find_if(hit_refs.begin(), hit_refs.end(), [&](const edm4eic::CalorimeterHit& hit) {
-                        auto pos = hit.getPosition();
-                        return pos.x == std::get<0>(point) && pos.y == std::get<1>(point) && pos.z == std::get<2>(point)
-                            && hit.getEnergy() == std::get<3>(point);
-                    });
+            // Remove duplicate hits
+            std::set<std::size_t> indices;
+            for (std::size_t i = 0; i < hits->size(); ++i) {
+                indices.insert(i);  // Insert all indices (set automatically removes duplicates)
+            }
 
-                    if (it != hit_refs.end()) {
-                        pcl.addToHits(*it);  // Add the hit to the ProtoCluster
-                        pcl.addToWeights(1); // Add weight (can adjust as needed)
+            // Apply DBSCAN algorithm
+            info("Starting DBSCAN clustering...");
+            std::vector<std::vector<std::size_t>> clusters;  // Store clusters
+            std::vector<std::size_t> noise;  // Store noise points
+
+            // Loop over hits to identify core points and expand clusters
+            std::vector<bool> visited(hits->size(), false);  // Track visited hits
+            std::vector<bool> isCore(hits->size(), false);   // Track core points
+
+            for (std::size_t i = 0; i < hits->size(); ++i) {
+                if (!visited[i] && (*hits)[i].getEnergy() >= energyThreshold) {
+                    visited[i] = true;
+                    // Find neighbors and determine if it's a core point
+                    std::vector<std::size_t> indicesVector(indices.begin(), indices.end());  // Convert set to vector
+                    std::vector<std::size_t> neighbors = findNeighbors(i, indicesVector, *hits);
+
+                    if (neighbors.size() >= minNeighbors1) {
+                        isCore[i] = true;
+                        std::vector<std::size_t> cluster;
+                        expandCluster(i, indicesVector, *hits, visited, cluster);  // Expand cluster without recursion
+                        clusters.push_back(cluster);  // Add the new cluster
+                    } else {
+                        noise.push_back(i);  // Add to noise if not a core point
                     }
                 }
+            }
 
-                proto_clusters->push_back(pcl);  // Add the constructed ProtoCluster to the output collection
+            // Create ProtoClusters from the clusters
+            for (const auto& cluster : clusters) {
+                auto pcl = proto->create();  // Create a new ProtoCluster
+                for (std::size_t idx : cluster) {
+                    pcl.addToHits((*hits)[idx]);  // Add hits to the ProtoCluster
+                    pcl.addToWeights(1);  // Add weight (default to 1 if no specific weight is provided)
+                }
+            }
+
+            // Create a single ProtoCluster for all noise hits
+            if (!noise.empty()) {
+                auto pcl = proto->create();  // Create a new ProtoCluster for noise
+                for (std::size_t idx : noise) {
+                    pcl.addToHits((*hits)[idx]);  // Add noise hits to the ProtoCluster
+                    pcl.addToWeights(1);  // Add weight (default to 1)
+                }
+            }
+        }
+
+    private:
+        // Function to find all neighbors of a point within epsilon1 distance
+        std::vector<std::size_t> findNeighbors(std::size_t idx, const std::vector<std::size_t>& indices, const edm4eic::CalorimeterHitCollection& hits) const {
+            std::vector<std::size_t> neighbors;
+            const auto& hit = hits[idx];
+
+            for (const auto& neighborIdx : indices) {
+                if (neighborIdx == idx) continue;  // Skip the hit itself
+                const auto& neighbor = hits[neighborIdx];
+                double dx = hit.getPosition().x - neighbor.getPosition().x;
+                double dy = hit.getPosition().y - neighbor.getPosition().y;
+                double dz = hit.getPosition().z - neighbor.getPosition().z;
+                double distance = std::sqrt(dx*dx + dy*dy + dz*dz);
+
+                if (distance <= epsilon1) {
+                    neighbors.push_back(neighborIdx);  // Add neighbor if within epsilon distance
+                }
+            }
+
+            return neighbors;
+        }
+
+        // Expand a cluster by adding neighboring points (non-recursive)
+        void expandCluster(std::size_t idx, const std::vector<std::size_t>& indices, const edm4eic::CalorimeterHitCollection& hits,
+                           std::vector<bool>& visited, std::vector<std::size_t>& cluster) const {
+            std::vector<std::size_t> toVisit = {idx};  // Start with the current core point
+
+            while (!toVisit.empty()) {
+                std::size_t currentIdx = toVisit.back();
+                toVisit.pop_back();
+
+                if (!visited[currentIdx]) {
+                    visited[currentIdx] = true;
+                    cluster.push_back(currentIdx);
+
+                    // Find neighbors and add them to the list to visit
+                    std::vector<std::size_t> neighbors = findNeighbors(currentIdx, indices, hits);
+                    toVisit.insert(toVisit.end(), neighbors.begin(), neighbors.end());  // Add all neighbors
+                }
             }
         }
 

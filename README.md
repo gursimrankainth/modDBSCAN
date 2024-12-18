@@ -12,7 +12,9 @@ EICRecon/Juggler script for a modified DBSCAN algorithm
    
 # Run only the ZDC_modDBSCAN Plugin: 
 source EICrecon/install/bin/eicrecon-this.sh
+
 source /opt/detector/epic-main/bin/thisepic.sh epic_zdc_lyso_sipm
+
 eicrecon -Ppodio:output_collections=HcalFarForwardZDCHits,HcalFarForwardZDCRawHits,HcalFarForwardZDCRecHits,HcalFarForwardZDCSubcellHits,HcalFarForwardZDCImagingProtoClusters \
   -Pplugins=ZDC_modDBSCAN -Pplugins_to_ignore="ZDC,EEMC,BEMC,FEMC,B0ECAL,BTRK,BVTX,ECTRK,MPGD,B0TRK,RPOTS,FOFFMTRK,BTOF,ECTOF,LOWQ2,LUMISPECCAL,PFRICH,DIRC,DRICH,EHCAL,BHCAL" \
   -Ppodio:output_file=LOCATION AND NAME OF OF OUTPUT FILE \

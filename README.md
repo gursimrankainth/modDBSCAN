@@ -1,8 +1,8 @@
-## modDBSCAN
-EICRecon/Juggler script for a modified DBSCAN algorithm 
+# modDBSCAN
+EICRecon/Juggler script for a modified DBSCAN algorithm (*Juggler scripts are out of date*)
 
 
-# Instructions for Installing the new ZDC_modDBSCAN Plugin: 
+## Instructions for Installing the new ZDC_modDBSCAN Plugin: 
 1. Make a new folder in the EICrecon/src/detectors directory called "ZDC_modDBSCAN". This is where the ZDC_modDBSCAN.cc and CMakeLists.txt scripts will be placed.
 2. Add ZDC_modDBSCAN.cc and CMakeLists.txt into the ZDC_modDBSCAN plugin directory
 3. Add the following line to the end of the CMakeLists.txt in the src/detectors directory so the new plugin compiles with the full EICrecon build, “add_subdirectory(ZDC_modDBSCAN)”
@@ -10,7 +10,7 @@ EICRecon/Juggler script for a modified DBSCAN algorithm
 6. Move to the EICrecon/build directory and in command line run, "cmake ..". You need to run this since we modified one of the CMake scripts that the framework is dependent on. 
 7. Now run “make”
    
-# Run only the ZDC_modDBSCAN Plugin: 
+## Run only the ZDC_modDBSCAN Plugin: 
 source EICrecon/install/bin/eicrecon-this.sh
 
 source /opt/detector/epic-main/bin/thisepic.sh epic_zdc_lyso_sipm
@@ -20,7 +20,7 @@ eicrecon -Ppodio:output_collections=HcalFarForwardZDCHits,HcalFarForwardZDCRawHi
   -Ppodio:output_file=LOCATION AND NAME OF OF OUTPUT FILE \
   LOCATION OF INPUT FILE
 
-# Notes: 
+## Notes: 
 - ZDC and ZDC_modDBSCAN plugins conflict. You need to diable the ZDC plugin as shown in the run command above if you would like to use ZDC_modDBSCAN instead.
 - ZDC_modDBSCAN is dependent on the FHCAL plugin. If you disable this it will run into issues. 
 
